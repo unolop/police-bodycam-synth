@@ -1,0 +1,5 @@
+generation:
+  guidance_scale: 7.5
+
+faceid:
+  scale: 0.6

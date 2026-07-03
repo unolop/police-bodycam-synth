@@ -1,0 +1,70 @@
+mode: text2img  # text2img | conditioned
+scenario: 1     # 1 = person-of-interest, 2 = missing person
+
+generation:
+  model: SG161222/RealVisXL_V5.0
+  steps: 30
+  guidance_scale: 7.5
+  width: 1024
+  height: 1024
+  batch_size: 1
+  seed: 42
+  fp16: true
+
+controlnet:
+  canny_model: diffusers/controlnet-canny-sdxl-1.0
+  openpose_model: thibaud/controlnet-openpose-sdxl-1.0
+  conditioning_scale: 0.5
+  control_mode: canny  # canny | openpose | both
+
+ip_adapter:
+  enabled: false
+  model_repo: h94/IP-Adapter
+  subfolder: sdxl_models
+  weight_name: ip-adapter_sdxl_vit-h.safetensors
+  scale: 0.6
+
+faceid:
+  ip_weights: h94/IP-Adapter-FaceID
+  ip_weight_name: ip-adapter-faceid_sdxl.bin
+  lora_weights: h94/IP-Adapter-FaceID
+  lora_weight_name: ip-adapter-faceid_sdxl_lora.safetensors
+  scale: 0.3               # lower = more scene control, higher = stronger identity
+  num_tokens: 4
+  insightface_model: buffalo_l
+
+prompt:
+  num_prompts: 100
+  diversity_seed: 42
+
+scene:
+  enabled: true
+  frames_per_scene: 10
+  num_scenes: 840            # 840 scenes × 10 frames = 8400 images
+  pose_variation: 0.3        # per-frame pose variation (0-1)
+  img2img_strength: 0.35     # denoising strength for frames 1+ (lower = more consistent)
+  identity_enabled: false    # enable IP-Adapter face conditioning
+  num_identities: 20         # pool of unique face identities
+  identity_ref_dir: null     # dir of reference face images
+
+extraction:
+  video_dir: null
+  frames_per_cut: 1
+  output_dir: null
+
+annotation:
+  dino_model: IDEA-Research/grounding-dino-base
+  dino_box_threshold: 0.3
+  dino_text_threshold: 0.25
+  sam2_model: facebook/sam2-hiera-large
+  yolo_model: yolov8x.pt
+  yolo_conf: 0.25
+  face_det_size: 640
+
+validation:
+  clip_model: ViT-H-14
+  clip_pretrained: laion2b_s32b_b79k
+  min_clip_score: 0.2
+  fid_real_path: null
+
+output_dir: output

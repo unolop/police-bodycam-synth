@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Data (large files, download separately)
+data/
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.onnx
+
+# Generated output
+output/
+
+# Models cache
+models/
+.cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+._*
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+*_executed.ipynb
+
+# Docs (project-internal PPTs/PDFs, not for public repo)
+docs/*.pptx
+docs/*.docx
+docs/*.pdf
+docs/output/
+
+# Environment
+.env
+*.log
