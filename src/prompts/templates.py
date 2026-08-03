@@ -71,26 +71,32 @@ TEMPLATE_DANGER_ABANDONED = (
 
 # Slot value pools
 LOCATIONS = [
-    "a neon-lit entertainment district with bars and restaurants",
-    "a busy subway station platform with fluorescent lights",
-    "an urban park with trees and benches",
-    "a shopping mall entrance with glass doors",
-    "a narrow residential alley with parked cars",
-    "a convenience store parking lot",
-    "a bus stop on a main road",
-    "a school zone crosswalk area",
-    "a crowded night market with food stalls and lanterns",
-    "a public plaza with a fountain",
-    "a dimly lit underpass tunnel",
-    "a train station concourse",
-    "a hospital entrance area",
-    "a construction site perimeter",
-    "a large parking garage with concrete pillars",
-    "a riverside walking path",
-    "a busy intersection with traffic lights",
-    "an outdoor cafe terrace",
-    "a traditional market street with vendors",
-    "a commercial district sidewalk with shop fronts",
+    # 유흥가 / 상업지구
+    "a Korean entertainment district alley at night, pojangmacha tents with orange awnings, neon hangul signs, wet pavement",
+    "a busy Korean street with PC bang and norebang signs, narrow sidewalk, scooters parked on curb",
+    "a Korean convenience store GS25 parking lot at night, fluorescent exterior lighting, vending machines outside",
+    "a Korean shopping district sidewalk with pharmacy and cosmetics shops, crowded narrow pavement",
+    # 지하철 / 교통
+    "a Seoul subway station platform, yellow safety line, orange seats visible, tiled walls, fluorescent lights",
+    "a Korean subway station exit stairway, tiled walls, fare gate visible, concrete steps",
+    "a Korean bus stop with glass shelter, route map board, yellow pavement markings",
+    "a Korean road crosswalk with traffic signal box, apartment blocks in background",
+    # 주택가 / 골목
+    "a narrow Korean residential alley between brick apartment walls, utility poles with wires, parked cars on both sides",
+    "a Korean apartment complex entrance gate, security booth, concrete pillars, name plates on wall",
+    "a Korean hillside residential area, steep alley between old brick walls, stairs visible",
+    "a Korean basement-level alley, half-underground shops, iron railings, concrete steps",
+    # 공원 / 한강
+    "a Korean urban park with exercise equipment, benches, elderly people in background, tiled path",
+    "a Han River park walkway, riverside railing, bridge visible in background, lamp posts",
+    "a school zone crosswalk in Korea, yellow markings, elementary school gate visible, safety signs",
+    # 전통 / 시장
+    "a Korean traditional market alley, plastic awnings overhead, vendor stalls on both sides, crowds",
+    "a Korean fish market area, styrofoam boxes, wet concrete floor, shop signs in hangul",
+    # 기타 도심
+    "a Korean hospital entrance, ambulance bay, automatic doors, covered driveway, concrete curb",
+    "a Korean underground parking garage, low ceiling, concrete pillars, yellow line markings",
+    "a Korean outdoor plaza with granite tiles, flagpoles, office buildings in background",
 ]
 
 TIME_OF_DAY = [
