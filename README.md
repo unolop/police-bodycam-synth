@@ -6,19 +6,54 @@
 
 본 프로젝트는 동형암호(HE) 기반 치안 AI 알고리즘의 개발 및 검증을 지원하기 위한 **합성 바디캠 이미지 데이터셋**을 생성합니다.
 
-실제 바디캠 영상 데이터의 수집이 어렵고 개인정보 이슈가 있기 때문에, 텍스트-이미지 생성 모델(SDXL)을 활용하여 사실적인 합성 데이터를 생성하고, 이를 동형암호 기반 얼굴 매칭 파이프라인의 검증에 활용합니다.
+실제 바디캠 영상 데이터의 수집이 어렵고 개인정보 이슈가 있기 때문에, 다음 두 단계로 합성 데이터를 생성합니다:
+
+1. **DeceiveD (StyleGAN2+APA)** → 한국인 합성 얼굴 ID 풀 생성
+2. **RealVisXL V5.0 + IP-Adapter-FaceID** → 얼굴 ID를 조건으로 한 바디캠 씬 생성
 
 ### 동형암호 얼굴 매칭 파이프라인
 
 ```
-바디캠 영상 → 얼굴 검출 → 512차원 임베딩 추출 → HE 암호화 → 암호화 유사도 검색 → 경보
+바디캠 영상 → 얼굴 검출(RetinaFace) → 512차원 임베딩(ArcFace) → HE 암호화 → 암호화 유사도 검색 → 경보
 ```
+
+---
+
+## 전체 파이프라인 구조
+
+```
+[Stage 1] 얼굴 ID 풀 생성
+    DeceiveD (4_Cond_Exp, 무표정)
+        ↓ 200개 고유 얼굴 생성 (1024×1024)
+    InsightFace buffalo_l (ArcFace R100)
+        ↓ 512차원 임베딩 추출 + 성별/나이 예측
+    Farthest-Point Sampling
+        ↓ 최다양 20개 ID 선별
+    data/celeb-k/face_pool_controlled/selected/
+
+[Stage 2] 바디캠 씬 생성
+    IP-Adapter-FaceID + RealVisXL V5.0 (SDXL)
+        ↓ 선별된 얼굴 임베딩 → 씬 내 얼굴 ID 고정
+    Scene-Sequential Generation
+        ↓ 씬당 10프레임 (프레임 0: text2img, 1-9: img2img 강도 0.35)
+    8,400장 합성 바디캠 이미지 (20 ID × 420장)
+
+[Stage 3] 자동 어노테이션
+    YOLOv8x + Grounding-DINO → 객체 검출
+    SAM2 → 세그멘테이션
+    COCO 포맷 저장 (scene_id, frame_index 포함)
+
+[Stage 4] 품질 검증
+    FID/KID, CLIP Score, SSIM/LPIPS, 얼굴 검출률
+```
+
+---
 
 ## 대상 시나리오
 
 ### 시나리오 1: 관리 대상자/수배자 식별
 
-경찰관이 바디캠을 착용하고 유흥가, 공공시설, 범죄 다발 지역 등을 순찰하며 대상자를 식별합니다.
+경찰관이 바디캠을 착용하고 한국 도심 지역을 순찰하며 대상자를 식별합니다.
 
 - 대상자 얼굴 검출 및 임베딩 추출
 - 암호화된 수배자 DB와 유사도 검색
@@ -31,101 +66,145 @@
 - 실종 아동/고령자 얼굴 매칭
 - 외모 기반 유사도 검색
 
+---
+
+## 얼굴 ID 풀 (Face Identity Pool)
+
+### 모델: DeceiveD (StyleGAN2 + APA)
+
+**Deceive D: Adaptive Pseudo Augmentation for GAN Training with Limited Data** (NeurIPS 2021)  
+Celeb-K 한국인 얼굴 데이터셋으로 훈련된 1024×1024 얼굴 생성 모델
+
+| 체크포인트 | FID | 조건 |
+|-----------|-----|------|
+| 1_Uncond | 14 | 무조건 생성 |
+| 2_Cond_Gender | 18 | 성별 조건 |
+| 3_Cond_Yaw | 18 | 얼굴 각도 조건 |
+| 4_Cond_Exp | 18 | 표정 조건 (7종) |
+
+### 표정 클래스 (4_Cond_Exp)
+
+| class | 표정 |
+|-------|------|
+| 0 | happy (행복) |
+| 1 | surprise (놀람) |
+| 2 | neutral (무표정) ← 현재 사용 |
+| 3 | disgust (혐오) |
+| 4 | angry (분노) |
+| 5 | fear (공포) |
+| 6 | sad (슬픔) |
+
+### 현재 생성 결과 (`data/celeb-k/face_pool_controlled/`)
+
+| 항목 | 값 |
+|------|-----|
+| 생성 모델 | DeceiveD 4_Cond_Exp (무표정, class=2) |
+| 생성 수 | 200개 고유 ID |
+| 얼굴 검출률 | 100% |
+| 성별 | Male 119 / Female 81 |
+| 평균 나이 | 30.8세 (±8.7) |
+| 코사인 유사도 평균 | 0.223 (낮을수록 다양) |
+| 근접 중복 쌍 (>0.7) | 3 / 19,900 |
+| 최종 선별 ID | 20개 (farthest-point sampling) |
+| VRAM 사용량 | ~122 MB |
+| 생성 속도 | ~64ms/장 (TITAN RTX) |
+
+### EDA 노트북
+
+`data/celeb-k/face_pool_controlled/` 및 `data/celeb-k/face_pool/face_pool_eda.ipynb`
+
+분석 항목:
+- 생성 얼굴 시각적 검사
+- ArcFace 임베딩 품질 (L2 norm, 분포)
+- 쌍별 코사인 유사도 분포 + CDF
+- PCA / t-SNE 신원 공간 시각화
+- 임베딩 매트릭스 히트맵
+- 선별 20개 ID 비교
+- 성별/나이 인구통계 분석
+
+---
+
 ## 프로젝트 구조
 
 ```
 ├── src/
 │   ├── config.py                  # 파이프라인 설정 (YAML → dataclass)
-│   ├── generate/                  # 이미지 생성 모듈
-│   │   ├── text2img.py            # SDXL 텍스트-이미지 생성
-│   │   ├── conditioned.py         # ControlNet 조건부 생성
-│   │   ├── faceid.py              # IP-Adapter FaceID 기반 생성
-│   │   ├── identity.py            # 얼굴 ID 관리
-│   │   ├── preprocessing.py       # 전처리
-│   │   └── vram.py                # VRAM 관리
-│   ├── prompts/                   # 프롬프트 생성 엔진
-│   │   ├── templates.py           # 바디캠 프롬프트 템플릿
-│   │   ├── scenario_engine.py     # 시나리오별 조합 생성
-│   │   ├── scene_planner.py       # 씬 시퀀스 생성
-│   │   └── prompt_store.py        # 프롬프트 저장/로드
-│   ├── annotate/                  # 자동 어노테이션
+│   ├── generate/
+│   │   ├── text2img.py            # RealVisXL 씬 생성 (text2img + img2img 체이닝)
+│   │   ├── identity.py            # 얼굴 ID 풀 로드 및 씬 배정
+│   │   └── vram.py                # VRAM 관리 (모델 스코프)
+│   ├── prompts/
+│   │   ├── templates.py           # 바디캠 프롬프트 템플릿 (1인칭 시점)
+│   │   ├── scene_planner.py       # 씬 순차 프롬프트 생성
+│   │   └── scenario_engine.py     # 시나리오별 조합 생성
+│   ├── annotate/
 │   │   ├── detector.py            # Grounding-DINO 검출
-│   │   ├── yolo_detector.py       # YOLO 검출
+│   │   ├── yolo_detector.py       # YOLOv8 검출
 │   │   ├── segmentor.py           # SAM2 세그멘테이션
-│   │   ├── face_embedder.py       # 얼굴 임베딩 추출
-│   │   ├── merger.py              # 어노테이션 병합
-│   │   └── coco_formatter.py      # COCO 포맷 변환
-│   ├── validate/                  # 품질 검증
-│   │   ├── face_quality.py        # 얼굴 검출률/임베딩 품질
-│   │   ├── ssim_lpips.py          # SSIM/LPIPS 안전성 평가
-│   │   ├── fid_kid.py             # FID/KID 분포 유사도
-│   │   ├── clip_score.py          # CLIP 텍스트-이미지 정합도
-│   │   └── report.py              # 평가 리포트 생성
-│   ├── extract/                   # 영상 프레임 추출
-│   └── dataset/                   # 데이터셋 패키징
-├── scripts/                       # 실행 스크립트
-│   ├── generate_sequential.py     # 순차적 얼굴→시나리오 생성 (메인)
-│   ├── run_evaluation.py          # 평가 실행
-│   ├── run_overnight_test.py      # 야간 대량 생성 테스트
-│   ├── run_generate.py            # 단일 생성 실행
-│   ├── run_pipeline.py            # 전체 파이프라인 실행
-│   ├── run_annotate.py            # 어노테이션 실행
-│   ├── run_validate.py            # 검증 실행
-│   ├── run_extract.py             # 프레임 추출 실행
-│   └── compare_models.py          # 모델 비교
-├── config/                        # YAML 설정 파일
-│   ├── default.yaml               # 기본 설정
-│   ├── scenario_poi.yaml          # 시나리오 1 설정
-│   ├── scenario_missing.yaml      # 시나리오 2 설정
+│   │   └── coco_formatter.py      # COCO 포맷 변환 (scene_id, frame_index 포함)
+│   └── validate/
+│       ├── face_quality.py        # 얼굴 검출률 + 임베딩 품질
+│       ├── fid_kid.py             # FID/KID
+│       ├── clip_score.py          # CLIP Score
+│       └── ssim_lpips.py          # 재식별 안전성
+├── scripts/
+│   ├── generate_face_pool.py          # DeceiveD 무조건 얼굴 풀 생성
+│   ├── generate_face_pool_controlled.py  # DeceiveD 표정 조건 얼굴 풀 생성 ← 현재 사용
+│   ├── eda_face_pool.py               # 얼굴 풀 EDA 스크립트
+│   ├── run_generate.py                # 바디캠 씬 생성 실행
+│   ├── run_annotate.py                # 어노테이션 실행
+│   └── run_validate.py                # 검증 실행
+├── config/
+│   ├── default.yaml               # 기본 설정 (RealVisXL V5.0, guidance=7.5)
 │   └── faceid_test.yaml           # FaceID 테스트 설정
-├── notebooks/                     # EDA 노트북
-└── docs/                          # 프로젝트 문서
+├── data/
+│   └── celeb-k/
+│       ├── face_pool/             # 무조건 생성 얼굴 풀 (1_Uncond)
+│       │   ├── generated/         # 200장 생성 이미지
+│       │   ├── embeddings/        # ArcFace 임베딩 (.npy)
+│       │   ├── selected/          # 선별 20개 ID
+│       │   └── face_pool_eda.ipynb  # EDA 노트북
+│       └── face_pool_controlled/  # 표정 조건 얼굴 풀 (4_Cond_Exp, 무표정)
+│           ├── generated/         # 200장 무표정 이미지
+│           ├── embeddings/        # ArcFace 임베딩 + 성별/나이 메타데이터
+│           ├── selected/          # 선별 20개 ID
+│           └── face_pool_report.json
+└── notebooks/
 ```
 
-## 생성 파이프라인
+---
 
-### 2단계 순차 생성 (`scripts/generate_sequential.py`)
+## 씬 순차 생성 (Scene-Sequential Generation)
 
-**Phase 1 — 얼굴 초상화 생성**
-- 얼굴 ID 데이터셋(62명)의 각 신원별 바디캠 스타일 초상화 생성
-- 신원당 3장, 다양한 장소/시간대/조명 조건
+동일 씬 내 연속 프레임 간 일관성을 위해 img2img 체이닝 사용:
 
-**Phase 2 — 시나리오 액션 생성**
-- 각 신원별 시나리오 액션 이미지 생성
-- 10개 액션 세트:
-  - `s1_poi_walking` — 대상자 접근
-  - `s1_poi_standing` — 대상자 서성거림
-  - `s1_poi_confrontation` — 대치 상황
-  - `s1_poi_weapon_knife` — 칼 소지
-  - `s1_poi_weapon_bat` — 야구배트 소지
-  - `s1_poi_weapon_bottle` — 깨진 병 소지
-  - `s1_poi_weapon_pipe` — 파이프 소지
-  - `s1_poi_abandoned_bag` — 의심 가방
-  - `s2_missing_child` — 실종 아동
-  - `s2_missing_elderly` — 실종 고령자
-
-### 실행 방법
-
-```bash
-# 환경 활성화
-conda activate police
-
-# 드라이 런 (프롬프트만 생성, 이미지 생성 안 함)
-python scripts/generate_sequential.py --dry-run
-
-# Phase 1만 실행 (얼굴 초상화)
-python scripts/generate_sequential.py --phase 1
-
-# Phase 2만 실행 (시나리오 액션)
-python scripts/generate_sequential.py --phase 2
-
-# 전체 실행 (야간 실행 권장)
-python scripts/generate_sequential.py --phase both
 ```
+프레임 0: text2img (씬 기준 프레임, scene_seed 고정)
+프레임 1-9: img2img from 프레임 0 (강도=0.35)
+    → 동일 장소/조명 유지, 피사체 행동 변화
+```
+
+- 누적 열화 방지: 프레임 N-1이 아닌 프레임 0에서 항상 디노이징
+- 씬당 10프레임, 총 840씬 → 8,400장
+
+---
+
+## 사용 모델
+
+| 용도 | 모델 |
+|------|------|
+| 얼굴 ID 생성 | DeceiveD (StyleGAN2+APA, Celeb-K 훈련) |
+| 바디캠 씬 생성 | RealVisXL V5.0 (SDXL 파인튜닝) |
+| 얼굴 ID 조건 | IP-Adapter-FaceID (SDXL) |
+| 얼굴 검출 | InsightFace buffalo_l / RetinaFace |
+| 얼굴 임베딩 | ArcFace R100 (512차원) |
+| 객체 검출 | YOLOv8x, Grounding-DINO |
+| 세그멘테이션 | SAM2 |
+| 품질 평가 | CLIP ViT-H-14, LPIPS (AlexNet) |
+
+---
 
 ## 평가 프레임워크
-
-PPT 기반 합성 데이터 평가 체계를 따릅니다:
 
 ### 유용성 (Utility)
 | 지표 | 설명 | 기준 |
@@ -137,64 +216,24 @@ PPT 기반 합성 데이터 평가 체계를 따릅니다:
 ### 안전성 (Safety)
 | 지표 | 설명 | 기준 |
 |------|------|------|
-| SSIM | 구조적 유사도 (재식별 위험) | < 0.6 (안전) |
-| LPIPS | 지각적 유사도 (재식별 위험) | > 0.3 (안전) |
+| SSIM | 구조적 유사도 (재식별 위험) | < 0.6 |
+| LPIPS | 지각적 유사도 (재식별 위험) | > 0.3 |
 
-### 얼굴 품질 (Face Quality)
+### 얼굴 품질
 | 지표 | 설명 | 기준 |
 |------|------|------|
 | 얼굴 검출률 | InsightFace 기반 검출 | ≥ 85% |
-| 코사인 유사도 | 임베딩 쌍별 분포 | 낮을수록 다양 |
-| 고유사도 쌍 비율 | cosine > 0.7 비율 | 0에 가까울수록 좋음 |
+| 코사인 유사도 평균 | 임베딩 쌍별 분포 | 낮을수록 다양 |
+| 근접 중복 쌍 비율 | cosine > 0.7 비율 | 0에 가까울수록 좋음 |
 
-### 평가 실행
-
-```bash
-# 단일 디렉토리 평가
-python scripts/run_evaluation.py output/sequential_gen/phase1_faces
-
-# 전체 시나리오 평가
-python scripts/run_evaluation.py output/sequential_gen --all-scenarios
-
-# 참조 데이터셋 대비 평가 (FID 계산)
-python scripts/run_evaluation.py output/sequential_gen/phase1_faces --reference-dir data/face_id_dataset
-```
-
-## 최근 생성 결과
-
-**1,220장 생성 (Phase 1: 183장 + Phase 2: 1,037장)**
-
-| 액션 세트 | 얼굴 검출률 | 상태 |
-|-----------|------------|------|
-| 얼굴 초상화 | 100.0% | PASS |
-| 대상자 접근 | 98.4% | PASS |
-| 대상자 서성 | 98.4% | PASS |
-| 대치 상황 | 96.7% | PASS |
-| 칼 소지 | 98.4% | PASS |
-| 야구배트 소지 | 97.5% | PASS |
-| 깨진 병 소지 | 100.0% | PASS |
-| 파이프 소지 | 100.0% | PASS |
-| 의심 가방 | 70.5% | FAIL |
-| 실종 아동 | 100.0% | PASS |
-| 실종 고령자 | 100.0% | PASS |
-| **전체** | **97.5%** | |
-
-## 사용 모델
-
-| 용도 | 모델 |
-|------|------|
-| 이미지 생성 | RealVisXL V5.0 (SDXL 기반) |
-| 얼굴 검출/임베딩 | InsightFace buffalo_l |
-| 객체 검출 | YOLOv8x, Grounding-DINO |
-| 세그멘테이션 | SAM2 |
-| 품질 평가 | CLIP ViT-H-14, LPIPS (AlexNet) |
+---
 
 ## 환경 설정
 
 ### 요구 사항
 - Python 3.11+
 - CUDA 12.1+ 호환 GPU (VRAM 24GB 권장)
-- conda 환경
+- conda
 
 ### 설치
 
@@ -202,11 +241,29 @@ python scripts/run_evaluation.py output/sequential_gen/phase1_faces --reference-
 conda create -n police python=3.11 -y
 conda activate police
 pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121
-pip install diffusers accelerate transformers compel safetensors
-pip install insightface onnxruntime-gpu
-pip install scikit-image lpips open-clip-torch
-pip install pillow numpy opencv-python pyyaml tqdm
+pip install diffusers accelerate transformers safetensors
+pip install insightface onnxruntime-gpu==1.20.1
+pip install scikit-learn scikit-image lpips open-clip-torch
+pip install pillow numpy opencv-python pyyaml tqdm matplotlib
 ```
+
+### 실행
+
+```bash
+# GPU 1 사용 (GPU 0은 디스플레이 전용)
+export CUDA_VISIBLE_DEVICES=1
+
+# 1. 얼굴 ID 풀 생성 (무표정, 200개)
+python scripts/generate_face_pool_controlled.py --num-faces 200 --num-select 20
+
+# 2. EDA 노트북 실행
+jupyter notebook data/celeb-k/face_pool/face_pool_eda.ipynb
+
+# 3. 바디캠 씬 생성
+python scripts/run_generate.py --identity-ref-dir data/celeb-k/face_pool_controlled/selected
+```
+
+---
 
 ## 참여 기관
 
