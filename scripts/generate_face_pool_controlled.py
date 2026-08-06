@@ -88,7 +88,8 @@ def select_diverse(embeddings: np.ndarray, k: int) -> list:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--num-faces", type=int, default=200)
-    parser.add_argument("--num-select", type=int, default=20)
+    parser.add_argument("--start-seed", type=int, default=0, help="Start seed (use 200 to continue from existing 200 faces)")
+    parser.add_argument("--num-select", type=int, default=0, help="Number of diverse IDs to select (0 = skip selection)")
     parser.add_argument("--truncation", type=float, default=0.7)
     parser.add_argument("--device", type=str, default="cuda:0")
     args = parser.parse_args()
@@ -113,7 +114,7 @@ def main():
     print(f"\nGenerating {args.num_faces} neutral (무표정) faces with 4_Cond_Exp...")
     embeddings, records, names = [], [], []
 
-    for seed in range(args.num_faces):
+    for seed in range(args.start_seed, args.start_seed + args.num_faces):
         img = generate_face(G, seed, NEUTRAL_CLASS, args.device, args.truncation)
         img_path = img_dir / f"face_{seed:04d}.png"
         img.save(img_path)
@@ -138,18 +139,20 @@ def main():
     female_count = sum(1 for r in records if r["gender"] == "F")
     print(f"\nTotal: {len(records)} faces — Male: {male_count}, Female: {female_count}")
 
-    # Step 2: Select most diverse
-    print(f"\nSelecting {args.num_select} most diverse identities...")
-    selected_indices = select_diverse(embeddings, args.num_select)
+    # Step 2: Select most diverse (optional)
     selected_info = []
-
-    for rank, idx in enumerate(selected_indices):
-        rec = records[idx]
-        name = rec["name"]
-        shutil.copy2(img_dir / f"{name}.png", sel_dir / f"{name}.png")
-        shutil.copy2(emb_dir / f"{name}.npy", sel_dir / f"{name}.npy")
-        selected_info.append({**rec, "rank": rank})
-        print(f"  {rank+1:2d}. {name}  gender={rec['gender']}  age={rec['age']}")
+    if args.num_select > 0:
+        print(f"\nSelecting {args.num_select} most diverse identities...")
+        selected_indices = select_diverse(embeddings, args.num_select)
+        for rank, idx in enumerate(selected_indices):
+            rec = records[idx]
+            name = rec["name"]
+            shutil.copy2(img_dir / f"{name}.png", sel_dir / f"{name}.png")
+            shutil.copy2(emb_dir / f"{name}.npy", sel_dir / f"{name}.npy")
+            selected_info.append({**rec, "rank": rank})
+            print(f"  {rank+1:2d}. {name}  gender={rec['gender']}  age={rec['age']}")
+    else:
+        print("\nSkipping selection (--num-select 0)")
 
     # Pairwise stats
     cos_sim = embeddings @ embeddings.T

@@ -36,10 +36,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.prompts import templates as T
-from src.generate.faceid import discover_face_dataset, load_face_labels
 
 # ── Configuration ─────────────────────────────────────────────────
-FACE_DATASET_DIR = "data/face id dataset"
+FACE_POOL_DIR = "data/celeb-k/face_pool_controlled/selected"
+FACE_POOL_REPORT = "data/celeb-k/face_pool_controlled/face_pool_report.json"
 
 # Generation defaults
 MODEL = "SG161222/RealVisXL_V5.0"

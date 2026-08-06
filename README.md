@@ -262,18 +262,3 @@ jupyter notebook data/celeb-k/face_pool/face_pool_eda.ipynb
 # 3. 바디캠 씬 생성
 python scripts/run_generate.py --identity-ref-dir data/celeb-k/face_pool_controlled/selected
 ```
-
----
-
-## 참여 기관
-
-본 프로젝트는 **"치안 비정형데이터 이용 활성화를 위한 암호화 AI모델 개발"** 과제의 일환입니다.
-
-- **서울여자대학교**: [B2] 치안활용 이미지 공개데이터셋 분석 + 합성데이터 생성
-- **CryptoLab**: 동형암호 기반 얼굴 매칭 파이프라인 개발
-
-### KPI 목표
-- Phase 1: 합성 이미지 50,000장 이상 (카테고리당 1,000장)
-- Phase 2: 합성 이미지 100,000장 이상 (카테고리당 2,000장)
-- 유사도 검색 정확도: 80% (Phase 1), 85% (Phase 2)
-- 임베딩 정확도: 평문 대비 ≥ 90% (Phase 1), ≥ 95% (Phase 2)
